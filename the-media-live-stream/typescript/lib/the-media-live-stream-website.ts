@@ -1,8 +1,6 @@
 import * as cdk from '@aws-cdk/core';
-import * as spadeploy from 'cdk-spa-deploy';
 import { SPADeploy } from 'cdk-spa-deploy';
-import * as fs from 'fs';
-
+const fs = require('fs')
 
 export class TheMediaLiveStreamWebsiteStack extends cdk.Stack {
   
@@ -10,27 +8,32 @@ export class TheMediaLiveStreamWebsiteStack extends cdk.Stack {
     super(scope, id, props);
 
     let url = "";
+    let that = this;
 
     // Getting URL from mediapackage
-    fs.exists('./urlwebsite.json', (exists) => {
+    fs.exists('./urlwebsite.json', (exists:any) => {
       if (exists) {
         var jsonFile = require('../urlwebsite.json');
         let jsondata = JSON.parse(JSON.stringify(jsonFile));
-        url = jsondata["TheMediaLiveStreamStack"]["mediapackageurlstream"];
+        if(jsondata.hasOwnProperty('TheMediaLiveStreamStack')){
+          url = jsondata["TheMediaLiveStreamStack"]["mediapackageurlstream"];
+        }
 
         // Writing new file
         let data = fs.readFileSync('website/index_original.html').toString('utf-8'); {
           let dataWithUrl = data.replace("##URLMEDIA##", url);
-          fs.writeFile('website/index.html', dataWithUrl, function(err) {
+          fs.writeFile('website/index.html', dataWithUrl, function(err:any) {
             if (err) {
                 return console.error(err);
+            }else {
+              new SPADeploy(that, "S3MediaLiveExample").createBasicSite({indexDoc: 'index.html',
+                                                                          websiteFolder: 'website/'});
             }
           });
         };
 
-        new SPADeploy(scope=this, id="S3MediaLiveExample").createBasicSite({indexDoc: 'index.html',
-                                                                          websiteFolder: 'website/'});
       }
     });
+
   }
 }
