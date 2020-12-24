@@ -16,6 +16,9 @@ class TheDynamodbAtomicCounterStack(core.Stack):
     def __init__(self, scope: core.Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        """
+        1: Creating appropriate roles
+        """
         # IAM Role for APIGateway
         iam_role = iam.Role(scope=self, id="iam-role-apigw", 
             role_name="iam-role-apigw",
@@ -33,7 +36,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         )
 
         """
-        1: Creating the DynamoDB table with a Partition (PrimaryKey)
+        2: Creating the DynamoDB table with a Partition (PrimaryKey)
         """
         partition_key = dynamodb.Attribute(name="atomicCounter", type=dynamodb.AttributeType.STRING)
         dynamodb_table = dynamodb.Table(scope=self, id="dynamodb-table",
@@ -43,7 +46,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         )
 
         """
-        2: We must insert initial data into DynamoDB table
+        3: We must insert initial data into DynamoDB table
         """
         custom_policy = AwsCustomResourcePolicy.from_sdk_calls(resources=AwsCustomResourcePolicy.ANY_RESOURCE)
 
@@ -71,7 +74,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
             parameters=create_params
         )
 
-        # AwsCustomResource for putItemoperation
+        # AwsCustomResource for putItem operation
         # https://docs.aws.amazon.com/cdk/api/latest/python/aws_cdk.custom_resources/AwsCustomResource.html
         data_resource = AwsCustomResource(scope=self, id="custom-populate-ddb",
             policy=custom_policy,
@@ -84,7 +87,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         
 
         """
-        3: Creating Rest API Gateway
+        4: Creating Rest API Gateway
         """
         api_gateway_atomic = apigateway.RestApi(scope=self, id="atomic-counter-api",
             rest_api_name="Atomic Count API",
@@ -94,41 +97,10 @@ class TheDynamodbAtomicCounterStack(core.Stack):
             deploy=True
         )
 
-        """
-        4: Creating Models for Sucess and Error
-        
-        success_response_model = api_gateway_atomic.add_model(
-            id="EmptyModel",
-            content_type="application/json",
-            model_name="EmptyModel",
-            schema=apigateway.JsonSchema(
-                schema=apigateway.JsonSchemaVersion.DRAFT4,
-                title="Success Schema",
-                type=apigateway.JsonSchemaType.OBJECT
-            )
-        )
-
-        error_response_model = api_gateway_atomic.add_model(
-            id="ErrorModel",
-            content_type="application/json",
-            model_name="ErrorModel",
-            schema=apigateway.JsonSchema(
-                schema=apigateway.JsonSchemaVersion.DRAFT4,
-                title="Error Schema",
-                type=apigateway.JsonSchemaType.OBJECT,
-                properties={
-                    "message": apigateway.JsonSchema(
-                        type=apigateway.JsonSchemaType.STRING
-                    )
-                }
-            )
-        )
-        """
-
         """ 
         5: Creating AWS Integration Service Response, Integration Options and Integration Service Method
         """
-        # 4.1: Integration Service Response
+        # 5.1: Integration Service Response
         integration_response_aws_service_integration = apigateway.IntegrationResponse(
             status_code="200",
             response_templates={
@@ -136,7 +108,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
             }
         )
 
-        # 4.2: Integration Options
+        # 5.2: Integration Options
         options_api_aws_service_integration = apigateway.IntegrationOptions(
             credentials_role=iam_role,
             integration_responses=[integration_response_aws_service_integration],
@@ -146,7 +118,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
             }
         )
 
-        # 4.3: Integration Service Method
+        # 5.3: Integration Service Method
         api_aws_service_integration = apigateway.AwsIntegration( 
             service="dynamodb",
             action="UpdateItem",
@@ -155,11 +127,11 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         )
 
         """
-        5: Adding resource /counter and method GET.
+        6: Adding resource /counter and method GET.
         """
         method_api_gateway_atomic = api_gateway_atomic.root.add_resource('counter')
 
-        method_api_gateway_atomic.add_method("GET", api_aws_service_integration,
+        method_api_gateway_atomic.add_method(http_method="GET", integration=api_aws_service_integration,
             method_responses=[{
                 "statusCode": "200",
                 "responseModels": {
@@ -169,7 +141,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         )
 
         """
-        6: Output URL
+        7: Output URL
         The output url will be: https://xxx.execute-api.REGION.amazonaws.com/prod/counter
         """
         core.CfnOutput(scope=self, id="apigw-counter-url", 
