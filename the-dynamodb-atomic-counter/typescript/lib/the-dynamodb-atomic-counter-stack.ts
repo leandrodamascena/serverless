@@ -5,8 +5,8 @@ import * as dynamodb from '@aws-cdk/aws-dynamodb';
 import {AwsSdkCall, AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId} from '@aws-cdk/custom-resources'
 
 const configuration = {
-  "table_name": "atomicCounter",
-  "incremental_count": 1
+  "tableName": "atomicCounter",
+  "defaultResource": "counter"
 }
 
 export class TheDynamodbAtomicCounterStack extends cdk.Stack {
@@ -16,15 +16,16 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
     /*
     * 1: Creating appropriate roles
     */
-    let iamRole = new iam.Role(scope = this, id = "iam-role-apigw", {
-      roleName: "iam-role-apigw",
+    // IAM Role for APIGateway
+    let iamRole = new iam.Role(scope = this, id = "iam-role-apigw-stack-cdk", {
+      roleName: "iam-role-apigw-stack-cdk",
       assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBFullAccess')],
       path: "/service-role/"
     });
-
-    let iamRoleLambda = new iam.Role(scope = this, id = "iam-role-lambda", {
-      roleName: "iam-role-lambda",
+    // IAM Role for Lambda - Data insert
+    let iamRoleLambda = new iam.Role(scope = this, id = "iam-role-lambda-stack-cdk", {
+      roleName: "iam-role-lambda-stack-cdk",
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBFullAccess')],
       path: "/service-role/"
@@ -34,7 +35,7 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
     * 2: Creating the DynamoDB table with a Partition (PrimaryKey)
     */ 
     const dynamodbTable = new dynamodb.Table(scope = this, id = "dynamodb-table", {
-      tableName: configuration["table_name"],
+      tableName: configuration["tableName"],
       partitionKey: {
         name: "atomicCounter",
         type: dynamodb.AttributeType.STRING
@@ -47,9 +48,9 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
     */
     const customPolicy = AwsCustomResourcePolicy.fromSdkCalls({ resources: AwsCustomResourcePolicy.ANY_RESOURCE });
 
-    // Params for insert
+    // Params for initial insert
     const createParams = {
-      "TableName": configuration["table_name"],
+      "TableName": configuration["tableName"],
       "Item": {
         "atomicCounter": {
           "S": "id"
@@ -84,7 +85,6 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
     const apiGatewayAtomic = new apigateway.RestApi(scope = this, id = "atomic-counter-api", {
       restApiName: "Atomic Count API",
       description: "This API serve an Atomic Count API pattern.",
-      endpointExportName: "counter",
       endpointTypes: [apigateway.EndpointType.REGIONAL],
       deploy: true
     });
@@ -106,7 +106,7 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
         }],
         passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
         requestTemplates: {
-          "application/json": "{\r\n    \"TableName\": \"atomicCounter\",\r\n    \"Key\": {\r\n        \"atomicCounter\": {\r\n            \"S\": \"id\"\r\n        }\r\n    },\r\n    \"UpdateExpression\": \"set counterValue = counterValue + :num\",\r\n    \"ExpressionAttributeValues\": {\r\n        \":num\": {\"N\": \"1\"}\r\n    },\r\n    \"ReturnValues\" : \"UPDATED_OLD\"\r\n}"
+          "application/json": "{\r\n    \"TableName\": \""+configuration["tableName"]+"\",\r\n    \"Key\": {\r\n        \"atomicCounter\": {\r\n            \"S\": \"id\"\r\n        }\r\n    },\r\n    \"UpdateExpression\": \"set counterValue = counterValue + :num\",\r\n    \"ExpressionAttributeValues\": {\r\n        \":num\": {\"N\": \"1\"}\r\n    },\r\n    \"ReturnValues\" : \"UPDATED_OLD\"\r\n}"
         }
       }
     });
@@ -114,7 +114,7 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
     /*
     * 6: Adding resource /counter and method GET.
     */
-    const methodApiGatewayAtomic = apiGatewayAtomic.root.addResource('counter');
+    const methodApiGatewayAtomic = apiGatewayAtomic.root.addResource(configuration["defaultResource"]);
     methodApiGatewayAtomic.addMethod("GET", apiAwsIntegration, {
       methodResponses: [{
         statusCode: "200",
@@ -129,7 +129,7 @@ export class TheDynamodbAtomicCounterStack extends cdk.Stack {
     * The output url will be: https://xxx.execute-api.REGION.amazonaws.com/prod/counter
     */
     new cdk.CfnOutput(scope=this, id='apigw-counter-url', {
-      value: `${apiGatewayAtomic.url}counter`
+      value: `${apiGatewayAtomic.url}${configuration["defaultResource"]}`
     });
   }
 }

@@ -8,7 +8,7 @@ from aws_cdk.custom_resources import (
 
 DEFAULT_CONF = {
     "table_name": "atomicCounter",
-    "incremental_count": 1
+    "default_resource": "counter"
 }
 
 class TheDynamodbAtomicCounterStack(core.Stack):
@@ -20,16 +20,16 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         1: Creating appropriate roles
         """
         # IAM Role for APIGateway
-        iam_role = iam.Role(scope=self, id="iam-role-apigw", 
-            role_name="iam-role-apigw",
+        iam_role = iam.Role(scope=self, id="iam-role-apigw-stack-cdk", 
+            role_name="iam-role-apigw-stack-cdk",
             assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
             managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name("AmazonDynamoDBFullAccess"),],
             path="/service-role/"
         )
 
-        # IAM Role for PopulateData
-        iam_role_lambda = iam.Role(scope=self, id="iam-role-lambda", 
-            role_name="iam-role-lambda",
+        # IAM Role for Lambda - Data insert
+        iam_role_lambda = iam.Role(scope=self, id="iam-role-lambda-stack-cdk", 
+            role_name="iam-role-lambda-stack-cdk",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name("AmazonDynamoDBFullAccess"),],
             path="/service-role/"
@@ -50,7 +50,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         """
         custom_policy = AwsCustomResourcePolicy.from_sdk_calls(resources=AwsCustomResourcePolicy.ANY_RESOURCE)
 
-        # Params for insert
+        # Params for initial insert
         create_params = {
             "TableName": DEFAULT_CONF.get("table_name"),
             "Item": {
@@ -92,7 +92,6 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         api_gateway_atomic = apigateway.RestApi(scope=self, id="atomic-counter-api",
             rest_api_name="Atomic Count API",
             description="This API serve an Atomic Count API pattern.",
-            endpoint_export_name="counter",
             endpoint_types=[apigateway.EndpointType.REGIONAL],
             deploy=True
         )
@@ -114,7 +113,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
             integration_responses=[integration_response_aws_service_integration],
             passthrough_behavior=apigateway.PassthroughBehavior.NEVER,
             request_templates={
-                "application/json": "{\r\n    \"TableName\": \"atomicCounter\",\r\n    \"Key\": {\r\n        \"atomicCounter\": {\r\n            \"S\": \"id\"\r\n        }\r\n    },\r\n    \"UpdateExpression\": \"set counterValue = counterValue + :num\",\r\n    \"ExpressionAttributeValues\": {\r\n        \":num\": {\"N\": \"1\"}\r\n    },\r\n    \"ReturnValues\" : \"UPDATED_OLD\"\r\n}"
+                "application/json": "{\r\n    \"TableName\": \""+DEFAULT_CONF.get("table_name")+"\",\r\n    \"Key\": {\r\n        \"atomicCounter\": {\r\n            \"S\": \"id\"\r\n        }\r\n    },\r\n    \"UpdateExpression\": \"set counterValue = counterValue + :num\",\r\n    \"ExpressionAttributeValues\": {\r\n        \":num\": {\"N\": \"1\"}\r\n    },\r\n    \"ReturnValues\" : \"UPDATED_OLD\"\r\n}"
             }
         )
 
@@ -129,7 +128,7 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         """
         6: Adding resource /counter and method GET.
         """
-        method_api_gateway_atomic = api_gateway_atomic.root.add_resource('counter')
+        method_api_gateway_atomic = api_gateway_atomic.root.add_resource(DEFAULT_CONF.get("default_resource"))
 
         method_api_gateway_atomic.add_method(http_method="GET", integration=api_aws_service_integration,
             method_responses=[{
@@ -145,5 +144,5 @@ class TheDynamodbAtomicCounterStack(core.Stack):
         The output url will be: https://xxx.execute-api.REGION.amazonaws.com/prod/counter
         """
         core.CfnOutput(scope=self, id="apigw-counter-url", 
-            value=f'{api_gateway_atomic.url}counter'
+            value=f'{api_gateway_atomic.url}{DEFAULT_CONF.get("default_resource")}'
         )
